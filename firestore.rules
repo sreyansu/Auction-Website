@@ -1,0 +1,48 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is an admin
+    // NOTE: In production, you should verify against a specific admin email 
+    // or a custom claim. For now, we allow any logged-in user to act as admin.
+    function isAdmin() {
+      return isAuthenticated(); 
+    }
+
+    // Players Collection
+    match /players/{playerId} {
+      allow read: if true; // Anyone can view players
+      allow write: if isAdmin(); // Only admins can seed or update sold status
+    }
+
+    // Teams Collection
+    match /teams/{teamId} {
+      allow read: if true; // Anyone can view teams
+      allow write: if isAdmin(); // Only admins can seed or update purses
+    }
+
+    // Auction State Document
+    match /auction/{docId} {
+      allow read: if true; // Anyone can view live auction status
+      allow write: if isAdmin(); // Only admins can start/pause/resume/bid/sold
+    }
+
+    // Bids Collection
+    match /bids/{bidId} {
+      allow read: if true; // Anyone can view bid history
+      allow create: if isAdmin(); // Only admins (or authenticated users acting as agents) can place bids
+      allow update, delete: if false; // Bids cannot be modified or deleted directly
+    }
+
+    // Fallback rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
