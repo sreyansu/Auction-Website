@@ -1,23 +1,29 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Home, Users, Shield, Gavel, Monitor, BarChart3, LogIn, LogOut, Menu, X } from 'lucide-react';
+import { useAuction } from '../../contexts/AuctionContext';
+import { Home, Users, Shield, Gavel, Monitor, BarChart3, LogIn, LogOut, Menu, X, ArrowLeftCircle } from 'lucide-react';
 
 export default function Navbar() {
   const { user, isAdmin, signInWithGoogle, logout } = useAuth();
+  const { activeLeagueId } = useAuction();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navLinks = [
-    { path: '/', label: 'Home', icon: <Home size={18} /> },
-    { path: '/players', label: 'Players', icon: <Users size={18} /> },
-    { path: '/teams', label: 'Teams', icon: <Shield size={18} /> },
-    { path: '/auction', label: 'Auction', icon: <Gavel size={18} /> },
-    { path: '/leaderboard', label: 'Leaderboard', icon: <BarChart3 size={18} /> },
+    { path: '/', label: 'Lobby', icon: <ArrowLeftCircle size={18} /> },
   ];
 
-  if (isAdmin && user) {
-    navLinks.push({ path: '/admin', label: 'Admin', icon: <Monitor size={18} /> });
+  if (activeLeagueId) {
+    navLinks.push({ path: '/dashboard', label: 'Dashboard', icon: <Home size={18} /> });
+    navLinks.push({ path: '/players', label: 'Players', icon: <Users size={18} /> });
+    navLinks.push({ path: '/teams', label: 'Teams', icon: <Shield size={18} /> });
+    navLinks.push({ path: '/auction', label: 'Auction', icon: <Gavel size={18} /> });
+    navLinks.push({ path: '/leaderboard', label: 'Leaderboard', icon: <BarChart3 size={18} /> });
+
+    if (isAdmin && user) {
+      navLinks.push({ path: '/admin', label: 'Admin', icon: <Monitor size={18} /> });
+    }
   }
 
   const isActive = (path: string) => location.pathname === path;
@@ -49,18 +55,20 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              to="/display"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all no-underline ml-1"
-              style={{
-                color: isActive('/display') ? '#0f0f0f' : 'var(--color-primary)',
-                background: isActive('/display') ? 'var(--color-primary)' : 'rgba(255,122,0,0.1)',
-                border: '1px solid var(--color-primary)',
-              }}
-            >
-              <Monitor size={18} />
-              Live Display
-            </Link>
+            {activeLeagueId && (
+              <Link
+                to="/display"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all no-underline ml-1"
+                style={{
+                  color: isActive('/display') ? '#0f0f0f' : 'var(--color-primary)',
+                  background: isActive('/display') ? 'var(--color-primary)' : 'rgba(255,122,0,0.1)',
+                  border: '1px solid var(--color-primary)',
+                }}
+              >
+                <Monitor size={18} />
+                Live Display
+              </Link>
+            )}
           </div>
 
           {/* Auth + Mobile Menu */}
@@ -109,18 +117,20 @@ export default function Navbar() {
                 {link.icon} {link.label}
               </Link>
             ))}
-            <Link
-              to="/display"
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium no-underline mt-1"
-              style={{
-                color: 'var(--color-primary)',
-                background: 'rgba(255,122,0,0.1)',
-                border: '1px solid rgba(255,122,0,0.3)',
-              }}
-            >
-              <Monitor size={18} /> Live Display
-            </Link>
+            {activeLeagueId && (
+              <Link
+                to="/display"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium no-underline mt-1"
+                style={{
+                  color: 'var(--color-primary)',
+                  background: 'rgba(255,122,0,0.1)',
+                  border: '1px solid rgba(255,122,0,0.3)',
+                }}
+              >
+                <Monitor size={18} /> Live Display
+              </Link>
+            )}
           </div>
         )}
       </div>

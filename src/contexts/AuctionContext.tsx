@@ -4,6 +4,8 @@ import { db } from '../lib/firebase';
 import type { Player, Team, AuctionState, Bid } from '../types';
 
 interface AuctionContextType {
+  activeLeagueId: string | null;
+  setActiveLeagueId: (id: string | null) => void;
   players: Player[];
   teams: Team[];
   auctionState: AuctionState | null;
@@ -16,27 +18,49 @@ interface AuctionContextType {
 const AuctionContext = createContext<AuctionContextType>({} as AuctionContextType);
 
 export function AuctionProvider({ children }: { children: ReactNode }) {
+  const [activeLeagueId, setActiveLeagueId] = useState<string | null>(localStorage.getItem('activeLeagueId'));
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Persist league ID changes
   useEffect(() => {
+    if (activeLeagueId) {
+      localStorage.setItem('activeLeagueId', activeLeagueId);
+    } else {
+      localStorage.removeItem('activeLeagueId');
+    }
+  }, [activeLeagueId]);
+
+  // Sync with Firestore subcollections based on activeLeagueId
+  useEffect(() => {
+    if (!activeLeagueId) {
+      setPlayers([]);
+      setTeams([]);
+      setAuctionState(null);
+      setBids([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
     const playersUnsub = onSnapshot(
-      query(collection(db, 'players'), orderBy('name')),
+      query(collection(db, 'leagues', activeLeagueId, 'players'), orderBy('name')),
       (snapshot) => {
         const playerData = snapshot.docs.map(d => ({
           id: d.id,
           ...d.data()
         })) as Player[];
         setPlayers(playerData);
-        setLoading(false);
+        setLoading(false); // only marking loading false when players load
       }
     );
 
     const teamsUnsub = onSnapshot(
-      query(collection(db, 'teams')),
+      query(collection(db, 'leagues', activeLeagueId, 'teams')),
       (snapshot) => {
         const teamData = snapshot.docs.map(d => ({
           id: d.id,
@@ -47,16 +71,18 @@ export function AuctionProvider({ children }: { children: ReactNode }) {
     );
 
     const auctionUnsub = onSnapshot(
-      doc(db, 'auction', 'current'),
+      doc(db, 'leagues', activeLeagueId, 'auction', 'current'),
       (snapshot) => {
         if (snapshot.exists()) {
           setAuctionState({ id: snapshot.id, ...snapshot.data() } as AuctionState);
+        } else {
+          setAuctionState(null);
         }
       }
     );
 
     const bidsUnsub = onSnapshot(
-      query(collection(db, 'bids'), orderBy('timestamp', 'desc')),
+      query(collection(db, 'leagues', activeLeagueId, 'bids'), orderBy('timestamp', 'desc')),
       (snapshot) => {
         const bidData = snapshot.docs.map(d => ({
           id: d.id,
@@ -72,7 +98,7 @@ export function AuctionProvider({ children }: { children: ReactNode }) {
       auctionUnsub();
       bidsUnsub();
     };
-  }, []);
+  }, [activeLeagueId]);
 
   const currentPlayer = auctionState?.current_player
     ? players.find(p => p.id === auctionState.current_player) || null
@@ -84,6 +110,7 @@ export function AuctionProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuctionContext.Provider value={{
+      activeLeagueId, setActiveLeagueId,
       players, teams, auctionState, bids,
       currentPlayer, highestBidderTeam, loading
     }}>

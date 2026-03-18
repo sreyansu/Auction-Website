@@ -11,7 +11,7 @@ import TeamLogo from '../components/common/TeamLogo';
 import { Gavel, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
 
 export default function AuctionPage() {
-  const { auctionState, currentPlayer, highestBidderTeam, teams, bids } = useAuction();
+  const { auctionState, currentPlayer, highestBidderTeam, teams, bids, activeLeagueId } = useAuction();
   const { user } = useAuth();
   const [showSold, setShowSold] = useState(false);
   const prevStatusRef = useRef(auctionState?.status);
@@ -41,15 +41,29 @@ export default function AuctionPage() {
   }, [auctionState]);
 
   const handleBid = async (teamId: string, teamName: string) => {
-    if (!auctionState || !currentPlayer || auctionState.status !== 'active') return;
+    if (!auctionState || !currentPlayer || auctionState.status !== 'active' || !activeLeagueId) return;
     const newBid = auctionState.current_bid + auctionState.bid_increment;
     const team = teams.find(t => t.id === teamId);
     if (team && team.purse_remaining < newBid) {
       alert('Insufficient purse balance!');
       return;
     }
-    await placeBid(auctionState.current_player, teamId, teamName, newBid);
+    await placeBid(activeLeagueId, auctionState.current_player, teamId, teamName, newBid);
   };
+
+  if (!activeLeagueId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center md:max-w-md p-6">
+          <AlertTriangle size={64} className="mx-auto mb-4" style={{ color: 'var(--color-warning)' }} />
+          <h2 className="text-2xl font-bold mb-2">No League Selected</h2>
+          <p style={{ color: 'var(--color-text-muted)' }}>
+            You must join a league from the Lobby before accessing the Auction Room.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!auctionState || auctionState.status === 'idle') {
     return (

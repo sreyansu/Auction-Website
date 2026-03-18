@@ -60,3 +60,10 @@ export interface AdminUser {
   displayName: string;
   isAdmin: boolean;
 }
+
+export interface League {
+  id: string;
+  name: string;
+  owner_uid: string;
+  created_at: number;
+}

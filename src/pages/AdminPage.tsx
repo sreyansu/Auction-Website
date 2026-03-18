@@ -6,14 +6,14 @@ import {
   markPlayerUnsold, resetAuction, initializeAuction,
   seedPlayers, seedTeams, setBidIncrement, updateAuctionTimer, updateAuctionStatus, placeBid
 } from '../services/firestore';
-import { generatePlayers, generateTeams } from '../data/seedData';
+import { parsePlayersCSV, parseTeamsCSV, downloadSamplePlayersCSV, downloadSampleTeamsCSV } from '../utils/csvParser';
 import { formatCurrency, getRoleIcon } from '../utils/helpers';
 import AuctionTimer from '../components/auction/AuctionTimer';
-import { Shield, Play, Pause, Check, X, RotateCcw, Database, Settings, Gavel } from 'lucide-react';
+import { Shield, Play, Pause, Database, Settings, Gavel, Upload, Download, FileSpreadsheet, Check, X, RotateCcw } from 'lucide-react';
 
 export default function AdminPage() {
   const { user, isAdmin, signInWithGoogle } = useAuth();
-  const { players, teams, auctionState } = useAuction();
+  const { players, teams, auctionState, activeLeagueId } = useAuction();
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [bidIncrement, setBidIncrementLocal] = useState(10);
@@ -23,16 +23,16 @@ export default function AdminPage() {
 
   // Timer countdown logic
   useEffect(() => {
-    if (auctionState?.status === 'active' && auctionState.timer > 0) {
+    if (auctionState?.status === 'active' && auctionState.timer > 0 && activeLeagueId) {
       timerRef.current = setInterval(async () => {
         if (auctionState.timer > 1) {
-          await updateAuctionTimer(auctionState.timer - 1);
+          await updateAuctionTimer(activeLeagueId, auctionState.timer - 1);
         } else {
           // Timer reached 0 - auto-mark unsold if no bidder
           if (!auctionState.highest_bidder) {
-            await markPlayerUnsold(auctionState.current_player);
+            await markPlayerUnsold(activeLeagueId, auctionState.current_player);
           } else {
-            await updateAuctionStatus('sold');
+            await updateAuctionStatus(activeLeagueId, 'sold');
           }
         }
       }, 1000);
@@ -43,7 +43,7 @@ export default function AdminPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [auctionState?.status, auctionState?.timer]);
+  }, [auctionState?.status, auctionState?.timer, activeLeagueId]);
 
   if (!user || !isAdmin) {
     return (
@@ -60,20 +60,47 @@ export default function AdminPage() {
     );
   }
 
+  // If no league is selected, Admin page shouldn't proceed
+  if (!activeLeagueId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <Database size={64} className="mx-auto mb-4" style={{ color: 'var(--color-warning)' }} />
+          <h2 className="text-2xl font-bold mb-2">No League Selected</h2>
+          <p className="mb-6" style={{ color: 'var(--color-text-muted)' }}>You must join or create a league from the Lobby before accessing the Admin panel.</p>
+        </div>
+      </div>
+    );
+  }
+
   const unsoldPlayers = players.filter(p => !p.sold);
   const currentPlayer = auctionState?.current_player ? players.find(p => p.id === auctionState.current_player) : null;
 
-  const handleSeedData = async () => {
-    if (!confirm('This will overwrite existing data. Continue?')) return;
+  const handlePlayersUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeLeagueId) return;
     setLoading(true);
     try {
-      await seedPlayers(generatePlayers());
-      await seedTeams(generateTeams());
-      await initializeAuction();
-      alert('Data seeded successfully! 100 players and 8 teams created.');
-    } catch (e) {
-      console.error(e);
-      alert('Error seeding data');
+      const parsedPlayers = await parsePlayersCSV(file);
+      await seedPlayers(activeLeagueId, parsedPlayers);
+      alert(`Successfully uploaded ${parsedPlayers.length} players!`);
+    } catch (err: any) {
+      alert(`Error parsing players CSV: ${err.message}`);
+    }
+    setLoading(false);
+  };
+
+  const handleTeamsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeLeagueId) return;
+    setLoading(true);
+    try {
+      const parsedTeams = await parseTeamsCSV(file);
+      await seedTeams(activeLeagueId, parsedTeams);
+      alert(`Successfully uploaded ${parsedTeams.length} teams. Initializing auction...`);
+      await initializeAuction(activeLeagueId);
+    } catch (err: any) {
+      alert(`Error parsing teams CSV: ${err.message}`);
     }
     setLoading(false);
   };
@@ -82,28 +109,28 @@ export default function AdminPage() {
     if (!selectedPlayer) return alert('Select a player first!');
     const player = players.find(p => p.id === selectedPlayer);
     if (!player) return;
-    await startAuction(selectedPlayer, player.base_price);
+    await startAuction(activeLeagueId, selectedPlayer, player.base_price);
   };
 
   const handleSold = async () => {
     if (!auctionState?.current_player || !auctionState.highest_bidder) return;
-    await markPlayerSold(auctionState.current_player, auctionState.highest_bidder, auctionState.current_bid);
+    await markPlayerSold(activeLeagueId, auctionState.current_player, auctionState.highest_bidder, auctionState.current_bid);
   };
 
   const handleUnsold = async () => {
     if (!auctionState?.current_player) return;
-    await markPlayerUnsold(auctionState.current_player);
+    await markPlayerUnsold(activeLeagueId, auctionState.current_player);
   };
 
   const handleReset = async () => {
     if (!confirm('Reset the entire auction? All data will be restored to defaults.')) return;
     setLoading(true);
-    await resetAuction();
+    await resetAuction(activeLeagueId);
     setLoading(false);
   };
 
   const handleBidIncrement = async () => {
-    await setBidIncrement(bidIncrement);
+    await setBidIncrement(activeLeagueId, bidIncrement);
   };
 
   const handleManualBid = async () => {
@@ -116,7 +143,7 @@ export default function AdminPage() {
     if (team && team.purse_remaining < amount) {
       return alert('Error: Team has insufficient purse balance for this bid!');
     }
-    await placeBid(auctionState.current_player, manualBidTeam, team?.team_name || '', amount);
+    await placeBid(activeLeagueId, auctionState.current_player, manualBidTeam, team?.team_name || '', amount);
     setManualBidAmount(''); // Reset input
   };
 
@@ -131,14 +158,43 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Controls */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Seed Data */}
+            {/* Data Management */}
             <div className="glass-card p-4">
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--color-text-muted)' }}>
-                <Database size={16} /> DATABASE
+                <Database size={16} /> DATA UPLOAD (CSV)
               </h3>
-              <button onClick={handleSeedData} disabled={loading} className="btn-primary flex items-center gap-2">
-                <Database size={16} /> {loading ? 'Seeding...' : 'Seed 50 Players + 4 Teams'}
-              </button>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Players */}
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
+                  <h4 className="font-bold mb-2 flex items-center gap-2"><FileSpreadsheet size={16} /> Players Data</h4>
+                  <p className="text-xs mb-3" style={{ color: 'var(--color-text-dim)' }}>Upload a CSV containing all player details and base prices.</p>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={downloadSamplePlayersCSV} className="btn-secondary text-xs py-1.5 flex justify-center gap-2">
+                      <Download size={14} /> Download Template
+                    </button>
+                    <label className="btn-primary text-xs py-1.5 flex justify-center gap-2 cursor-pointer text-center">
+                      <Upload size={14} /> {loading ? 'Uploading...' : 'Upload Players'}
+                      <input type="file" accept=".csv" className="hidden" onChange={handlePlayersUpload} disabled={loading} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Teams */}
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)' }}>
+                  <h4 className="font-bold mb-2 flex items-center gap-2"><Shield size={16} /> Teams Data</h4>
+                  <p className="text-xs mb-3" style={{ color: 'var(--color-text-dim)' }}>Upload a CSV containing team franchises and budgets.</p>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={downloadSampleTeamsCSV} className="btn-secondary text-xs py-1.5 flex justify-center gap-2">
+                      <Download size={14} /> Download Template
+                    </button>
+                    <label className="btn-primary text-xs py-1.5 flex justify-center gap-2 cursor-pointer text-center">
+                      <Upload size={14} /> {loading ? 'Uploading...' : 'Upload Teams'}
+                      <input type="file" accept=".csv" className="hidden" onChange={handleTeamsUpload} disabled={loading} />
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Current Auction Status */}
@@ -221,7 +277,7 @@ export default function AdminPage() {
                   <Play size={16} /> Start
                 </button>
                 <button
-                  onClick={() => auctionState?.status === 'paused' ? resumeAuction() : pauseAuction()}
+                  onClick={() => auctionState?.status === 'paused' ? resumeAuction(activeLeagueId) : pauseAuction(activeLeagueId)}
                   disabled={!auctionState || (auctionState.status !== 'active' && auctionState.status !== 'paused')}
                   className="btn-secondary flex items-center justify-center gap-2 text-sm"
                 >
