@@ -145,8 +145,8 @@ export const markPlayerSold = async (
     const teamData = teamDocSnap.data() as Team;
     const currentBought = teamData.players_bought || [];
     await updateDoc(teamDocRef, {
-      purse_remaining: teamData.purse_remaining - soldPrice,
-      total_spent: teamData.total_spent + soldPrice,
+      purse_remaining: (teamData.purse_remaining || 0) - soldPrice,
+      total_spent: (teamData.total_spent || 0) + soldPrice,
       players_bought: [...currentBought, playerId],
     });
   }

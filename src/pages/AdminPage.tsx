@@ -8,12 +8,13 @@ import {
 } from '../services/firestore';
 import { parsePlayersCSV, parseTeamsCSV, downloadSamplePlayersCSV, downloadSampleTeamsCSV } from '../utils/csvParser';
 import { formatCurrency, getRoleIcon } from '../utils/helpers';
+import BidHistory from '../components/auction/BidHistory';
 import AuctionTimer from '../components/auction/AuctionTimer';
 import { Shield, Play, Pause, Database, Settings, Gavel, Upload, Download, FileSpreadsheet, Check, X, RotateCcw } from 'lucide-react';
 
 export default function AdminPage() {
   const { user, isAdmin, signInWithGoogle } = useAuth();
-  const { players, teams, auctionState, activeLeagueId } = useAuction();
+  const { players, teams, auctionState, activeLeagueId, bids } = useAuction();
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [bidIncrement, setBidIncrementLocal] = useState(10);
@@ -369,11 +370,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Sidebar - Player Queue */}
-          <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-muted)' }}>
-              PLAYER QUEUE ({unsoldPlayers.length} remaining)
-            </h3>
+          {/* Sidebar */}
+          <div className="space-y-6">
+            <BidHistory bids={bids} />
+
+            <div className="glass-card p-4">
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                PLAYER QUEUE ({unsoldPlayers.length} remaining)
+              </h3>
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {unsoldPlayers.slice(0, 20).map(p => (
                 <button
@@ -398,6 +402,7 @@ export default function AdminPage() {
                 </button>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </div>
